@@ -14,19 +14,14 @@ export async function POST(req: Request) {
         moodLabel: analysis.moodLabel || "Neutral",
         stressLevel: analysis.stressLevel || 5,
         productivity: analysis.productivity || 5,
-        aiReflection: analysis.friendResponse || "I hear you.", // The "Friend" part
-        analysis: analysis, // <--- SAVING THE FULL BRAIN DUMP HERE
+        
+        // ⬇️ THE FIX: Now looking for 'mentorReflection' to match the new Brain
+        aiReflection: analysis.mentorReflection || "I am listening.", 
+        
+        // Save the full JSON analysis (actions, etc.)
+        analysis: analysis, 
       },
     });
-
-    const profile = await prisma.userProfile.findFirst();
-    const newSummary = ((profile?.summary || "") + " " + (analysis.memorySnippet || "")).slice(-4000);
-
-    if (profile) {
-      await prisma.userProfile.update({ where: { id: profile.id }, data: { summary: newSummary } });
-    } else {
-      await prisma.userProfile.create({ data: { summary: newSummary } });
-    }
 
     return NextResponse.json(entry);
   } catch (error) {
