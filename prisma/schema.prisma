@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserProfile {
+  id          String   @id @default(uuid())
+  summary     String   @default("") @db.Text
+  lastUpdated DateTime @default(now())
+}
+
+model Entry {
+  id        String   @id @default(uuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  
+  // AI Analysis Data
+  moodScore    Int      @default(5)
+  moodLabel    String   @default("Neutral")
+  stressLevel  Int      @default(5)
+  productivity Int      @default(5)
+  aiReflection String?  @db.Text
+  
+  @@index([createdAt])
+}
