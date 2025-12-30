@@ -14,16 +14,19 @@ model UserProfile {
 }
 
 model Entry {
-  id        String   @id @default(uuid())
-  content   String   @db.Text
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  content      String
+  moodScore    Int
+  moodLabel    String
+  stressLevel  Int
+  productivity Int
   
-  // AI Analysis Data
-  moodScore    Int      @default(5)
-  moodLabel    String   @default("Neutral")
-  stressLevel  Int      @default(5)
-  productivity Int      @default(5)
-  aiReflection String?  @db.Text
+  // The "Friend" response (Support)
+  aiReflection String   
   
-  @@index([createdAt])
+  // NEW: Stores the "Master" advice and "Coach" checklist
+  analysis     Json?    
+
+  userId       String?  // Prepared for when we add Login later
 }

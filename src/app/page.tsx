@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/db";
 import EntryForm from "@/components/EntryForm";
 import { format } from "date-fns";
-import { Brain, Calendar } from "lucide-react";
-
+import { Brain, Calendar, Sparkles } from "lucide-react";
 export const dynamic = 'force-dynamic';
 
 export default async function Dashboard() {
@@ -36,15 +35,41 @@ export default async function Dashboard() {
 
         <div className="md:col-span-5 space-y-6 flex flex-col h-full">
           {todayEntry ? (
-            <div className="glass-panel p-6 rounded-2xl border-l-4 border-indigo-500">
-              <div className="flex items-center gap-2 mb-3 text-indigo-300">
-                <Brain size={20} />
-                <h3 className="font-semibold">AI Reflection</h3>
+            <div className="space-y-6">
+              
+              {/* 1. The Adaptive Reflection Card */}
+              <div className="glass-panel p-6 rounded-2xl border-l-4 border-indigo-500 relative overflow-hidden">
+                <div className="flex items-center gap-2 mb-4 text-indigo-300">
+                  <Sparkles size={20} />
+                  <h3 className="font-semibold text-lg">Reflection</h3>
+                </div>
+                
+                <div className="relative z-10">
+                  <p className="text-slate-100 text-lg leading-relaxed font-light italic">
+                    "{todayEntry.aiReflection}"
+                  </p>
+                </div>
               </div>
-              <p className="text-slate-200 italic leading-relaxed">
-                "{todayEntry.aiReflection}"
-              </p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
+
+              {/* 2. The Context-Aware Actions */}
+              {todayEntry.analysis && (todayEntry.analysis as any).actionItems && (
+                <div className="glass-panel p-5 rounded-2xl border border-white/5">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1">
+                    Suggested Next Steps
+                  </h4>
+                  <ul className="space-y-3">
+                    {(todayEntry.analysis as any).actionItems.map((item: string, i: number) => (
+                      <li key={i} className="flex gap-3 items-start text-sm text-slate-300 group">
+                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></span>
+                        <span className="group-hover:text-indigo-200 transition-colors">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Stats Row */}
+              <div className="grid grid-cols-3 gap-2 opacity-80">
                 <div className="bg-slate-900/50 rounded p-2 text-center">
                   <div className="text-xs text-slate-500">Mood</div>
                   <div className="text-indigo-200 font-medium">{todayEntry.moodLabel}</div>

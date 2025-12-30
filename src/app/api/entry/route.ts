@@ -14,7 +14,8 @@ export async function POST(req: Request) {
         moodLabel: analysis.moodLabel || "Neutral",
         stressLevel: analysis.stressLevel || 5,
         productivity: analysis.productivity || 5,
-        aiReflection: analysis.reflection || "I'm listening.",
+        aiReflection: analysis.friendResponse || "I hear you.", // The "Friend" part
+        analysis: analysis, // <--- SAVING THE FULL BRAIN DUMP HERE
       },
     });
 
