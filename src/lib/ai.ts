@@ -25,7 +25,7 @@ export async function analyzeEntry(content: string) {
       { role: "system", content: "You are a JSON-only API." },
       { role: "user", content: prompt }
     ],
-    model: "llama3-70b-8192", 
+    model: "llama-3.3-70b-versatile", 
     response_format: { type: "json_object" },
   });
 
