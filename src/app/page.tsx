@@ -1,18 +1,19 @@
 import { prisma } from "@/lib/db";
 import EntryForm from "@/components/EntryForm";
-import { format } from "date-fns";
-import { Brain, Calendar, Sparkles, ChevronRight } from "lucide-react"; // Added ChevronRight
+import { format, isSameDay } from "date-fns";
+import { Brain, Calendar, Sparkles, ChevronRight, Calendar as CalendarIcon, Trash2, Quote } from "lucide-react"; 
 import { auth, currentUser } from "@clerk/nextjs/server"; 
 import { UserButton } from "@clerk/nextjs"; 
-import Link from "next/link"; // Import Link for clickable items
+import Link from "next/link"; 
+import { deleteEntry } from "./actions"; // Import the delete action
 
 export const dynamic = 'force-dynamic';
 
 interface Props {
-  searchParams: { [key: string]: string | string[] | undefined }
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-export default async function Home({ searchParams }: Props) {
+export default async function Home(props: Props) {
   const { userId } = await auth();
   const user = await currentUser(); 
 
@@ -20,39 +21,59 @@ export default async function Home({ searchParams }: Props) {
      return <div className="p-8 text-slate-400">Please sign in to view your diary.</div>;
   }
 
-  // 1. Determine which entry to show
-  const selectedId = typeof searchParams.id === 'string' ? searchParams.id : null;
+  const params = await props.searchParams;
+  const selectedId = typeof params.id === 'string' ? params.id : null;
 
-  let activeEntry = null;
+  // 1. Determine the "Active Date"
+  let activeDate = new Date();
+  let dailyEntries: any[] = [];
 
   if (selectedId) {
-    // A. If user clicked a specific item, fetch that exact one
-    activeEntry = await prisma.entry.findFirst({
-      where: {
-        id: selectedId,
-        userId: userId, // Security: Ensure it belongs to YOU
-      },
+    // If user clicked an ID, find out what DAY that was
+    const selectedEntry = await prisma.entry.findUnique({
+      where: { id: selectedId, userId },
     });
-  } else {
-    // B. Default: Fetch "Today's" entry
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-
-    activeEntry = await prisma.entry.findFirst({
-      where: {
-        userId: userId,
-        createdAt: { gte: startOfDay, lte: endOfDay },
-      },
-    });
+    
+    if (selectedEntry) {
+      activeDate = new Date(selectedEntry.createdAt);
+    }
   }
 
-  // 2. Fetch History List
-  const entries = await prisma.entry.findMany({
+  // 2. Fetch ALL entries for that specific day (Timeline)
+  const startOfDay = new Date(activeDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(activeDate);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  dailyEntries = await prisma.entry.findMany({
+    where: {
+      userId: userId,
+      createdAt: { gte: startOfDay, lte: endOfDay },
+    },
+    orderBy: { createdAt: 'asc' }, // Oldest first (like a chat)
+  });
+
+  // 3. Fetch Sidebar History (Past 20 items for navigation)
+  const historyEntries = await prisma.entry.findMany({
     where: { userId: userId },
     take: 20,
     orderBy: { createdAt: 'desc' }
   });
+
+  // 4. Generate the "Daily Story" (Aggregate Reflections)
+  // We take the reflections from the day and join them to make a summary
+  const dailyNarrative = dailyEntries
+    .filter(e => e.aiReflection)
+    .map(e => e.aiReflection)
+    .join(" ");
+
+  // 5. Calculate Daily Averages
+  const avgMood = dailyEntries.length > 0 
+    ? Math.round(dailyEntries.reduce((acc, curr) => acc + (curr.moodScore || 5), 0) / dailyEntries.length)
+    : 0;
+
+  const isToday = isSameDay(activeDate, new Date());
 
   return (
     <main className="aura-bg min-h-screen p-4 md:p-8 flex flex-col">
@@ -62,6 +83,9 @@ export default async function Home({ searchParams }: Props) {
           <div className="bg-white/10 p-1 rounded-full">
             <UserButton afterSignOutUrl="/"/>
           </div>
+          <Link href="/history" className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors text-slate-400 hover:text-indigo-300">
+            <CalendarIcon size={20} />
+          </Link>
           <div>
             <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-rose-300">
               Hi, {user.firstName} 
@@ -70,98 +94,125 @@ export default async function Home({ searchParams }: Props) {
           </div>
         </div>
         <div className="text-right hidden md:block">
-           <div className="text-2xl font-light text-slate-200">{format(new Date(), "EEEE")}</div>
-           <div className="text-indigo-400 text-sm">{format(new Date(), "MMMM do")}</div>
+           <div className="text-2xl font-light text-slate-200">{format(activeDate, "EEEE")}</div>
+           <div className="text-indigo-400 text-sm">{format(activeDate, "MMMM do")}</div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto w-full grid grid-cols-1 md:grid-cols-12 gap-6 flex-1">
-        {/* LEFT COLUMN: Entry Form OR View Mode */}
-        <div className="md:col-span-7 min-h-[500px]">
-          {/* If we are looking at an old entry, show it in 'Read Only' mode. If today, show Form. */}
-          {!selectedId ? (
-             <EntryForm />
-          ) : (
-            <div className="glass-panel p-8 rounded-2xl h-full flex flex-col relative">
-              <Link href="/" className="absolute top-4 right-4 text-xs text-slate-500 hover:text-white transition-colors">
-                 Back to Today ✕
-              </Link>
-              <div className="mb-6">
-                <span className="text-indigo-300 text-sm font-medium">
-                  {activeEntry ? format(activeEntry.createdAt, "MMMM do, yyyy") : "Entry"}
-                </span>
-                <div className="h-1 w-12 bg-indigo-500/30 mt-2 rounded-full"></div>
+        
+        {/* LEFT COLUMN: The "Timeline" Chat */}
+        <div className="md:col-span-7 flex flex-col gap-4 min-h-[500px]">
+          
+          {/* If looking at past, show "Back to Today" */}
+          {!isToday && (
+             <Link href="/" className="bg-indigo-500/20 text-indigo-200 p-3 rounded-xl text-center text-sm hover:bg-indigo-500/30 transition-colors mb-2">
+               You are viewing a past memory from <strong>{format(activeDate, "MMMM do")}</strong>. 
+               Click here to return to today.
+             </Link>
+          )}
+
+          {/* THE CHAT FEED */}
+          <div className="flex-1 space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
+            {dailyEntries.length === 0 && isToday && (
+               <div className="text-center text-slate-500 mt-20">
+                 <p>The page is blank. Write your first thought...</p>
+               </div>
+            )}
+
+            {dailyEntries.map((entry) => (
+              <div key={entry.id} className="group relative pl-4 border-l-2 border-white/10 hover:border-indigo-500/50 transition-colors pb-6">
+                {/* Timeline Dot */}
+                <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-600 group-hover:border-indigo-400 group-hover:bg-indigo-900 transition-colors"></div>
+                
+                <div className="flex justify-between items-start mb-2">
+                   <span className="text-xs text-slate-400 font-mono">{format(entry.createdAt, "h:mm a")}</span>
+                   
+                   {/* DELETE BUTTON */}
+                   <form action={async () => {
+                      'use server';
+                      await deleteEntry(entry.id);
+                   }}>
+                      <button className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all p-1" title="Delete Memory">
+                        <Trash2 size={14} />
+                      </button>
+                   </form>
+                </div>
+
+                <div className="glass-panel p-4 rounded-xl rounded-tl-none inline-block max-w-full">
+                  <p className="text-slate-200 whitespace-pre-wrap leading-relaxed">{entry.content}</p>
+                </div>
+                
+                {/* Mini AI feedback inline (optional, keeps it conversational) */}
+                <div className="mt-2 flex gap-2">
+                   <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-full text-slate-500 border border-white/5">
+                      {entry.moodLabel}
+                   </span>
+                </div>
               </div>
-              <p className="text-slate-200 text-lg leading-relaxed whitespace-pre-wrap">
-                {activeEntry?.content}
-              </p>
+            ))}
+          </div>
+
+          {/* INPUT FORM (Only show if it is TODAY) */}
+          {isToday && (
+            <div className="mt-auto pt-4 border-t border-white/5">
+              <EntryForm />
             </div>
           )}
         </div>
 
-        {/* RIGHT COLUMN: AI Analysis & History */}
+        {/* RIGHT COLUMN: The "Story" & Summary */}
         <div className="md:col-span-5 space-y-6 flex flex-col h-full">
-          {activeEntry ? (
+          
+          {dailyEntries.length > 0 ? (
             <div className="space-y-6">
-              <div className="glass-panel p-6 rounded-2xl border-l-4 border-indigo-500 relative overflow-hidden">
+              
+              {/* 1. THE DAILY STORY / NARRATIVE */}
+              <div className="glass-panel p-6 rounded-2xl border-t-4 border-indigo-500 relative overflow-hidden bg-gradient-to-b from-indigo-900/20 to-transparent">
                 <div className="flex items-center gap-2 mb-4 text-indigo-300">
-                  <Sparkles size={20} />
-                  <h3 className="font-semibold text-lg">Reflection</h3>
+                  <Quote size={20} />
+                  <h3 className="font-semibold text-lg">The Story of the Day</h3>
                 </div>
                 <div className="relative z-10">
-                  <p className="text-slate-100 text-lg leading-relaxed font-light italic">
-                    "{activeEntry.aiReflection}"
+                  <p className="text-slate-200 text-md leading-relaxed font-light italic opacity-90">
+                    "{dailyNarrative || "A quiet day with no major reflections yet."}"
                   </p>
                 </div>
               </div>
 
-              {activeEntry.analysis && (activeEntry.analysis as any).actionItems && (
-                <div className="glass-panel p-5 rounded-2xl border border-white/5">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1">
-                    Suggested Actions
-                  </h4>
-                  <ul className="space-y-3">
-                    {(activeEntry.analysis as any).actionItems.map((item: string, i: number) => (
-                      <li key={i} className="flex gap-3 items-start text-sm text-slate-300 group">
-                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></span>
-                        <span className="group-hover:text-indigo-200 transition-colors">{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              
+              {/* Stats Row */}
               <div className="grid grid-cols-3 gap-2 opacity-80">
                 <div className="bg-slate-900/50 rounded p-2 text-center">
-                  <div className="text-xs text-slate-500">Mood</div>
-                  <div className="text-indigo-200 font-medium">{activeEntry.moodLabel}</div>
+                  <div className="text-xs text-slate-500">Avg Mood</div>
+                  <div className="text-indigo-200 font-medium">{avgMood}/10</div>
                 </div>
                 <div className="bg-slate-900/50 rounded p-2 text-center">
-                  <div className="text-xs text-slate-500">Stress</div>
-                  <div className="text-indigo-200 font-medium">{activeEntry.stressLevel}/10</div>
+                  <div className="text-xs text-slate-500">Entries</div>
+                  <div className="text-indigo-200 font-medium">{dailyEntries.length}</div>
                 </div>
                 <div className="bg-slate-900/50 rounded p-2 text-center">
                   <div className="text-xs text-slate-500">Focus</div>
-                  <div className="text-indigo-200 font-medium">{activeEntry.productivity}/10</div>
+                  <div className="text-indigo-200 font-medium">--</div>
                 </div>
               </div>
+
             </div>
           ) : (
              <div className="glass-panel p-6 rounded-2xl flex items-center justify-center text-slate-500 h-40">
-               <p>Select an entry to view details.</p>
+               <p>No memories found for this day.</p>
              </div>
           )}
 
-          {/* HISTORY LIST (Now Clickable) */}
+          {/* SIDEBAR HISTORY */}
           <div className="glass-panel rounded-2xl flex-1 overflow-hidden flex flex-col">
             <div className="p-4 border-b border-white/5 flex items-center gap-2 text-slate-300">
               <Calendar size={18} />
-              <h3 className="font-semibold">Recent Memories</h3>
+              <h3 className="font-semibold">Recent Timeline</h3>
             </div>
             <div className="overflow-y-auto p-4 space-y-3 flex-1 h-96">
-              {entries.map(entry => (
+              {historyEntries.map(entry => (
                 <Link 
-                  href={`/?id=${entry.id}`} // <--- THIS MAKES IT CLICKABLE
+                  href={`/?id=${entry.id}`} 
                   key={entry.id} 
                   className={`block group p-3 rounded-xl transition-all cursor-pointer border hover:border-white/10 ${
                     selectedId === entry.id ? 'bg-white/10 border-indigo-500/50' : 'hover:bg-white/5 border-transparent'
@@ -183,6 +234,7 @@ export default async function Home({ searchParams }: Props) {
               ))}
             </div>
           </div>
+
         </div>
       </div>
     </main>
