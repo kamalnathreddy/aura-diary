@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-// import { Inter } from "next/font/google"; // <-- You can remove this if you aren't using Inter
-import { ClerkProvider } from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs"; // <--- 1. Import this
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aura Diary", // Changed title to match your app
+  title: "Aura Diary",
   description: "Personal AI Sanctuary",
 };
 
@@ -25,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // 👇 THIS WRAPPER WAS MISSING
+    // 2. Wrap EVERYTHING in ClerkProvider
     <ClerkProvider>
       <html lang="en">
         <body
